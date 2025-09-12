@@ -37,7 +37,7 @@ A command-line application that converts JSON files to Excel format (.xlsx) with
 
 ### Download
 Download the latest standalone executable from the releases:
-- `JsonToExcel-Final.exe` https://github.com/robertorenz/jsontoexcel/blob/main/JsonToExcel-Final.exe   - Complete standalone version (no .NET installation required)
+- `JsonToExcel-Final.exe`  - Complete standalone version (no .NET installation required)
 
 ## Usage
 
