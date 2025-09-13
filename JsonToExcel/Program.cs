@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using OfficeOpenXml;
-using OfficeOpenXml.Style;
+using ClosedXML.Excel;
 using System.Drawing;
 
 class Program
@@ -96,12 +95,10 @@ class Program
         string jsonContent = File.ReadAllText(jsonFile);
         JToken jsonToken = JToken.Parse(jsonContent);
 
-        // Set EPPlus license for noncommercial use
-        ExcelPackage.License.SetNonCommercialPersonal("JsonToExcel App User");
-
-        using (var package = new ExcelPackage())
+        // ClosedXML is completely free - no license needed!
+        using (var workbook = new XLWorkbook())
         {
-            var worksheet = package.Workbook.Worksheets.Add("Data");
+            var worksheet = workbook.Worksheets.Add("Data");
 
             if (jsonToken is JArray jsonArray)
             {
@@ -113,15 +110,14 @@ class Program
             }
             else
             {
-                worksheet.Cells[1, 1].Value = jsonToken.ToString();
+                worksheet.Cell(1, 1).Value = jsonToken.ToString();
             }
 
-            FileInfo excelFileInfo = new FileInfo(excelFile);
-            package.SaveAs(excelFileInfo);
+            workbook.SaveAs(excelFile);
         }
     }
 
-    static void WriteArrayToWorksheet(JArray jsonArray, ExcelWorksheet worksheet, bool enableFormatting = true)
+    static void WriteArrayToWorksheet(JArray jsonArray, IXLWorksheet worksheet, bool enableFormatting = true)
     {
         if (jsonArray.Count == 0) return;
 
@@ -132,22 +128,18 @@ class Program
             // Create header row
             for (int col = 0; col < properties.Length; col++)
             {
-                var headerCell = worksheet.Cells[1, col + 1];
+                var headerCell = worksheet.Cell(1, col + 1);
                 headerCell.Value = properties[col].Name;
                 
                 if (enableFormatting)
                 {
                     // Header formatting
                     headerCell.Style.Font.Bold = true;
-                    headerCell.Style.Font.Color.SetColor(Color.White);
-                    headerCell.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                    headerCell.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(68, 114, 196));
-                    headerCell.Style.Border.Top.Style = ExcelBorderStyle.Thin;
-                    headerCell.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
-                    headerCell.Style.Border.Left.Style = ExcelBorderStyle.Thin;
-                    headerCell.Style.Border.Right.Style = ExcelBorderStyle.Thin;
-                    headerCell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-                    headerCell.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
+                    headerCell.Style.Font.FontColor = XLColor.White;
+                    headerCell.Style.Fill.BackgroundColor = XLColor.FromArgb(68, 114, 196);
+                    headerCell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                    headerCell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    headerCell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
                 }
                 else
                 {
@@ -163,23 +155,19 @@ class Program
                 {
                     for (int col = 0; col < properties.Length; col++)
                     {
-                        var dataCell = worksheet.Cells[row + 2, col + 1];
+                        var dataCell = worksheet.Cell(row + 2, col + 1);
                         var value = obj[properties[col].Name];
-                        dataCell.Value = ConvertValue(value);
+                        dataCell.Value = ConvertValue(value)?.ToString() ?? "";
                         
                         if (enableFormatting)
                         {
                             // Data cell formatting with alternating colors
                             bool isEvenRow = row % 2 == 0;
-                            Color rowColor = isEvenRow ? Color.FromArgb(242, 242, 242) : Color.White;
+                            var rowColor = isEvenRow ? XLColor.FromArgb(242, 242, 242) : XLColor.White;
                             
-                            dataCell.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                            dataCell.Style.Fill.BackgroundColor.SetColor(rowColor);
-                            dataCell.Style.Border.Top.Style = ExcelBorderStyle.Thin;
-                            dataCell.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
-                            dataCell.Style.Border.Left.Style = ExcelBorderStyle.Thin;
-                            dataCell.Style.Border.Right.Style = ExcelBorderStyle.Thin;
-                            dataCell.Style.Border.BorderAround(ExcelBorderStyle.Thin, Color.LightGray);
+                            dataCell.Style.Fill.BackgroundColor = rowColor;
+                            dataCell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                            dataCell.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
                             
                             // Format numbers and dates
                             FormatDataCell(dataCell, value);
@@ -191,7 +179,7 @@ class Program
             // Auto-fit columns
             for (int col = 1; col <= properties.Length; col++)
             {
-                worksheet.Column(col).AutoFit();
+                worksheet.Column(col).AdjustToContents();
                 if (enableFormatting && worksheet.Column(col).Width > 50) // Max width limit
                     worksheet.Column(col).Width = 50;
             }
@@ -199,18 +187,17 @@ class Program
         else
         {
             // Handle simple array
-            var headerCell = worksheet.Cells[1, 1];
+            var headerCell = worksheet.Cell(1, 1);
             headerCell.Value = "Value";
             
             if (enableFormatting)
             {
                 // Header formatting
                 headerCell.Style.Font.Bold = true;
-                headerCell.Style.Font.Color.SetColor(Color.White);
-                headerCell.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                headerCell.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(68, 114, 196));
-                headerCell.Style.Border.BorderAround(ExcelBorderStyle.Thin);
-                headerCell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+                headerCell.Style.Font.FontColor = XLColor.White;
+                headerCell.Style.Fill.BackgroundColor = XLColor.FromArgb(68, 114, 196);
+                headerCell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                headerCell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             }
             else
             {
@@ -220,31 +207,30 @@ class Program
             
             for (int i = 0; i < jsonArray.Count; i++)
             {
-                var dataCell = worksheet.Cells[i + 2, 1];
-                dataCell.Value = ConvertValue(jsonArray[i]);
+                var dataCell = worksheet.Cell(i + 2, 1);
+                dataCell.Value = ConvertValue(jsonArray[i])?.ToString() ?? "";
                 
                 if (enableFormatting)
                 {
                     // Alternating row colors
                     bool isEvenRow = i % 2 == 0;
-                    Color rowColor = isEvenRow ? Color.FromArgb(242, 242, 242) : Color.White;
-                    dataCell.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                    dataCell.Style.Fill.BackgroundColor.SetColor(rowColor);
-                    dataCell.Style.Border.BorderAround(ExcelBorderStyle.Thin, Color.LightGray);
+                    var rowColor = isEvenRow ? XLColor.FromArgb(242, 242, 242) : XLColor.White;
+                    dataCell.Style.Fill.BackgroundColor = rowColor;
+                    dataCell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
                     
                     FormatDataCell(dataCell, jsonArray[i]);
                 }
             }
             
-            worksheet.Column(1).AutoFit();
+            worksheet.Column(1).AdjustToContents();
         }
     }
 
-    static void WriteObjectToWorksheet(JObject jsonObject, ExcelWorksheet worksheet, bool enableFormatting = true)
+    static void WriteObjectToWorksheet(JObject jsonObject, IXLWorksheet worksheet, bool enableFormatting = true)
     {
         // Setup headers
-        var propertyHeader = worksheet.Cells[1, 1];
-        var valueHeader = worksheet.Cells[1, 2];
+        var propertyHeader = worksheet.Cell(1, 1);
+        var valueHeader = worksheet.Cell(1, 2);
         
         propertyHeader.Value = "Property";
         valueHeader.Value = "Value";
@@ -255,12 +241,11 @@ class Program
             foreach (var headerCell in new[] { propertyHeader, valueHeader })
             {
                 headerCell.Style.Font.Bold = true;
-                headerCell.Style.Font.Color.SetColor(Color.White);
-                headerCell.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                headerCell.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(68, 114, 196));
-                headerCell.Style.Border.BorderAround(ExcelBorderStyle.Thin);
-                headerCell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-                headerCell.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
+                headerCell.Style.Font.FontColor = XLColor.White;
+                headerCell.Style.Fill.BackgroundColor = XLColor.FromArgb(68, 114, 196);
+                headerCell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                headerCell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                headerCell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
             }
         }
         else
@@ -275,23 +260,22 @@ class Program
         var properties = jsonObject.Properties().ToArray();
         for (int i = 0; i < properties.Length; i++)
         {
-            var propertyCell = worksheet.Cells[i + 2, 1];
-            var valueCell = worksheet.Cells[i + 2, 2];
+            var propertyCell = worksheet.Cell(i + 2, 1);
+            var valueCell = worksheet.Cell(i + 2, 2);
             
             propertyCell.Value = properties[i].Name;
-            valueCell.Value = ConvertValue(properties[i].Value);
+            valueCell.Value = ConvertValue(properties[i].Value)?.ToString() ?? "";
             
             if (enableFormatting)
             {
                 // Alternating row colors
                 bool isEvenRow = i % 2 == 0;
-                Color rowColor = isEvenRow ? Color.FromArgb(242, 242, 242) : Color.White;
+                var rowColor = isEvenRow ? XLColor.FromArgb(242, 242, 242) : XLColor.White;
                 
                 foreach (var dataCell in new[] { propertyCell, valueCell })
                 {
-                    dataCell.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                    dataCell.Style.Fill.BackgroundColor.SetColor(rowColor);
-                    dataCell.Style.Border.BorderAround(ExcelBorderStyle.Thin, Color.LightGray);
+                    dataCell.Style.Fill.BackgroundColor = rowColor;
+                    dataCell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
                 }
                 
                 // Format the value cell based on data type
@@ -300,13 +284,13 @@ class Program
         }
         
         // Auto-fit columns
-        worksheet.Column(1).AutoFit();
-        worksheet.Column(2).AutoFit();
+        worksheet.Column(1).AdjustToContents();
+        worksheet.Column(2).AdjustToContents();
         if (enableFormatting && worksheet.Column(2).Width > 50)
             worksheet.Column(2).Width = 50;
     }
 
-    static void FormatDataCell(ExcelRange cell, JToken token)
+    static void FormatDataCell(IXLCell cell, JToken token)
     {
         if (token == null || token.Type == JTokenType.Null)
             return;
@@ -314,46 +298,46 @@ class Program
         switch (token.Type)
         {
             case JTokenType.Integer:
-                cell.Style.Numberformat.Format = "#,##0";
-                cell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+                cell.Style.NumberFormat.Format = "#,##0";
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
                 break;
             case JTokenType.Float:
-                cell.Style.Numberformat.Format = "#,##0.00";
-                cell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+                cell.Style.NumberFormat.Format = "#,##0.00";
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
                 break;
             case JTokenType.Date:
-                cell.Style.Numberformat.Format = "mm/dd/yyyy";
-                cell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+                cell.Style.NumberFormat.Format = "mm/dd/yyyy";
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
                 break;
             case JTokenType.Boolean:
-                cell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
                 // Color boolean values
                 if (token.Value<bool>())
                 {
-                    cell.Style.Font.Color.SetColor(Color.Green);
+                    cell.Style.Font.FontColor = XLColor.Green;
                     cell.Style.Font.Bold = true;
                 }
                 else
                 {
-                    cell.Style.Font.Color.SetColor(Color.Red);
+                    cell.Style.Font.FontColor = XLColor.Red;
                 }
                 break;
             case JTokenType.String:
-                cell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Left;
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
                 
                 // Special formatting for email addresses
                 string? stringValue = token.Value<string>();
                 if (!string.IsNullOrEmpty(stringValue) && stringValue.Contains("@") && stringValue.Contains("."))
                 {
-                    cell.Style.Font.Color.SetColor(Color.Blue);
-                    cell.Style.Font.UnderLine = true;
+                    cell.Style.Font.FontColor = XLColor.Blue;
+                    cell.Style.Font.Underline = XLFontUnderlineValues.Single;
                 }
                 break;
             case JTokenType.Array:
             case JTokenType.Object:
-                cell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Left;
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
                 cell.Style.Font.Italic = true;
-                cell.Style.Font.Color.SetColor(Color.Gray);
+                cell.Style.Font.FontColor = XLColor.Gray;
                 break;
         }
     }
